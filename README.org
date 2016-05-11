@@ -1,0 +1,12 @@
+Very basic torrent client as a way to learn Racket.
+
+* TODO
+- Announcing/Peer requesting:
+  - Throught UDP trackers (only HTTP right now).
+  - Use Magnet URIs in addition to torrent files.
+- Upload to peers.
+- Consider multiple trackers.
+- Proper exception handling.
+- Proper logging (the current output is basically pure noise)
+- Unreinvent all the wheels as I learn how to write idiomatic Racket.
+- More test (only a very small subset of function is covered).
