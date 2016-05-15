@@ -58,33 +58,34 @@
       [(empty? missing-pieces)
        (displayln "Finished requesting all pieces.")]
       [else
-       (let ([available-peer (get-next-available-peer peer-workers
-                                                      (first missing-pieces)
-                                                      (torrent-number-of-pieces t))])
-         (cond
-           [(void? available-peer)
-            (sleep 1)
-            (download-remaining-pieces t
-                                       missing-pieces
-                                       (remove-dead-workers peer-workers))]
-           [(not (peer-am-interested (car available-peer)))
-            (set-peer-am-interested! (car available-peer) #t)
-            (thread-send (cadr available-peer) 'interested #f)
-            (download-remaining-pieces t
-                                       missing-pieces
-                                       (remove-dead-workers peer-workers))]
-           [else
-            (let ([p (car available-peer)]
-                  [w (cadr available-peer)])
-              (thread-send w (list 'request (first missing-pieces)) #f)
-              (set-peer-ready! p #f))
-            (download-remaining-pieces t
-                                       (rest missing-pieces)
-                                       (remove-dead-workers peer-workers))]))]))
+       (define available-peer (get-next-available-peer peer-workers
+                                                       (first missing-pieces)
+                                                       (torrent-number-of-pieces t)))
+       (cond
+         [(void? available-peer)
+          (sleep 1)
+          (download-remaining-pieces t
+                                     missing-pieces
+                                     (remove-dead-workers peer-workers))]
+         [(not (peer-am-interested (car available-peer)))
+          (set-peer-am-interested! (car available-peer) #t)
+          (thread-send (cadr available-peer) 'interested #f)
+          (download-remaining-pieces t
+                                     missing-pieces
+                                     (remove-dead-workers peer-workers))]
+         [else
+          (let ([p (car available-peer)]
+                [w (cadr available-peer)])
+            (thread-send w (list 'request (first missing-pieces)) #f)
+            (set-peer-ready! p #f))
+          (download-remaining-pieces t
+                                     (rest missing-pieces)
+                                     (remove-dead-workers peer-workers))])]))
 
 ;; Example
 ;;
 ;; Parse the torrent file
+;; (define t (make-torrent "./path/to/torrent_file.torrent"))
 (define t (make-torrent "../torrent/sample/ubuntu.torrent"))
 (define my-peer-id (generate-peer-id))
 ;; Request some peers

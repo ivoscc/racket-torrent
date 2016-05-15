@@ -5,34 +5,17 @@
 
 (require "encoding.rkt")
 
-(define (get-piece-length t piece-index)
-  (let (;; pieces are 0-indexed
-        [piece-number (add1 piece-index)]
-        [number-of-pieces (torrent-number-of-pieces t)]
-        [regular-piece-length (torrent-piece-length t)])
-    (cond [(< piece-number number-of-pieces) regular-piece-length]
-          [(= piece-number number-of-pieces) (- (torrent-data-length t)
-                                                (* (sub1 number-of-pieces)
-                                                   regular-piece-length))]
-          [else 0])))
-
-(define (create-output-file-container name)
-  (let ([path (build-path (current-directory)
-                          (string-append name ".temp"))])
-    (when (not (directory-exists? path))
-      (display "DEBUG: Creating output directory.")
-      (make-directory path))
-    path))
-
-(define (get-missing-pieces path number-of-pieces)
-  (let ([downloaded-pieces (map (lambda (item)
-                                  (string->number
-                                   (path->string item)))
-                                (directory-list path))])
-    (for/list ([i (range number-of-pieces)]
-               #:unless (member i downloaded-pieces))
-      i)))
-
+(provide get-piece-length
+         make-torrent
+         torrent-announce
+         torrent-data-length
+         torrent-name
+         torrent-number-of-pieces
+         torrent-missing-pieces
+         torrent-output-path
+         torrent-piece-hashes
+         torrent-piece-length
+         torrent-sha1)
 
 (struct torrent (name sha1 announce data-length piece-hashes
                       piece-length number-of-pieces
@@ -67,15 +50,28 @@
              output-path
              (get-missing-pieces output-path number-of-pieces))))
 
+(define (get-piece-length t piece-index)
+  (define max-piece-index (sub1 (torrent-number-of-pieces t)))
+  (define regular-piece-length (torrent-piece-length t))
+  (define total-data-length (torrent-data-length t))
+  (cond [(< piece-index max-piece-index) regular-piece-length]
+        [(= piece-index max-piece-index) (- total-data-length
+                                            (* max-piece-index
+                                               regular-piece-length))]
+        [else 0]))
 
-(provide get-piece-length
-         make-torrent
-         torrent-announce
-         torrent-data-length
-         torrent-name
-         torrent-number-of-pieces
-         torrent-missing-pieces
-         torrent-output-path
-         torrent-piece-hashes
-         torrent-piece-length
-         torrent-sha1)
+(define (get-missing-pieces path number-of-pieces)
+  (define downloaded-pieces (map (lambda (item)
+                                   (string->number (path->string item)))
+                                 (directory-list path)))
+  (for/list ([i (range number-of-pieces)]
+             #:unless (member i downloaded-pieces))
+    i))
+
+(define (create-output-file-container name)
+  (define path (build-path (current-directory)
+                           (string-append name ".temp")))
+  (unless (directory-exists? path)
+    (display "DEBUG: Creating output directory.")
+    (make-directory path))
+  path)

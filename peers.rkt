@@ -9,6 +9,17 @@
 (require "torrent.rkt")
 (require "utils.rkt")
 
+(provide make-peer
+         create-peer-worker
+         peer-ready
+         peer-peer-choking
+         peer-pieces
+         peer-current-blocks
+         peer-am-interested
+         set-peer-am-interested!
+         set-peer-ready!)
+
+;; Handshake
 (define PROTOCOL-HEADER (bytes-append (bytes 19) #"BitTorrent protocol"))
 (define RESERVED-BYTES #"\0\0\0\0\0\0\0\0")
 (define HANDSHAKE-HEADER (bytes-append PROTOCOL-HEADER RESERVED-BYTES))
@@ -27,7 +38,6 @@
 ;; Messages
 (define INTERESTED-PAYLOAD #"\0\0\0\1\2")
 
-
 (struct peer ([id #:mutable]
               url
               [ready #:mutable]
@@ -43,13 +53,14 @@
               [peer-choking #:mutable]
               ;; peer_interested: peer is interested in this client
               [peer-interested #:mutable])
+  ;; TODO: Add a way to show the current blocks without potentially displaying
+  ;; displaying several thousands of bytes on screen.
   #:transparent)
 
 (define (make-peer address piece-length)
-  ;; Starting status
   (peer null
         (string->url address)
-        ;; ready
+        ; ready
         #f
         ;; current-piece-index
         null
@@ -99,8 +110,8 @@
     (values piece-index block-offset data)))
 
 (define (update-current-blocks! peer block-offset data)
-  (let ([current-blocks (peer-current-blocks peer)])
-    (vector-set! current-blocks (/ block-offset BLOCK-SIZE) data)))
+  (define current-blocks (peer-current-blocks peer))
+  (vector-set! current-blocks (/ block-offset BLOCK-SIZE) data))
 
 (define (clear-current-piece! peer)
   (set-peer-current-blocks! peer
@@ -109,13 +120,13 @@
                              #"")))
 
 (define (flush-complete-piece! peer io-worker)
-  (let ([current-blocks (peer-current-blocks peer)])
-    (thread-send io-worker
-                 (list 'piece
-                       (peer-current-piece-index peer)
-                       (apply bytes-append (vector->list
-                                            current-blocks))))
-    (clear-current-piece! peer)))
+  (define current-blocks (peer-current-blocks peer))
+  (thread-send io-worker
+               (list 'piece
+                     (peer-current-piece-index peer)
+                     (apply bytes-append (vector->list
+                                          current-blocks))))
+  (clear-current-piece! peer))
 
 (define (piece-complete? target-torrent target-peer piece-index)
   (>= (foldl + 0 (map bytes-length
@@ -173,11 +184,11 @@
         [(= type TYPE-BITFIELD)
          (set-peer-pieces! target-peer (bytes->number payload))]
         [(= type TYPE-PIECE)
-         (let-values ([(piece-index block-offset data) (parse-piece payload)])
-           (update-current-blocks! target-peer block-offset data)
-           (when (piece-complete? target-torrent target-peer piece-index)
-             (flush-complete-piece! target-peer io-worker)
-             (set-peer-ready! target-peer #t)))]
+         (define-values (piece-index block-offset data) (parse-piece payload))
+         (update-current-blocks! target-peer block-offset data)
+         (when (piece-complete? target-torrent target-peer piece-index)
+           (flush-complete-piece! target-peer io-worker)
+           (set-peer-ready! target-peer #t))]
         [else
          (displayln "Method not implemented.")])))
 
@@ -228,34 +239,24 @@
       (define-values (tcp-in tcp-out)
         (tcp-connect (url-host (peer-url target-peer))
                      (url-port (peer-url target-peer))))
-
-      (let ([peer-id (handshake-send/receive tcp-in tcp-out
-                                             (torrent-sha1 target-torrent)
-                                             my-peer-id
-                                             #:timeout 5)])
-        (cond [(void? peer-id)
-               (displayln "Failed to perform handshake.")
-               (custodian-shutdown-all (current-custodian))]
-              [else
-               (set-peer-id! target-peer peer-id)
-               (set-peer-ready! target-peer #t)
-               (thread
-                (lambda ()
-                  (with-handlers
-                    ([exn:fail:network?
-                      (lambda (exn)
-                        (displayln "Peer connection close unexpectedly."))])
-                    (peer-worker target-torrent
-                                 target-peer
-                                 tcp-in
-                                 tcp-out
-                                 io-worker))))])))))
-(provide make-peer
-         create-peer-worker
-         peer-ready
-         peer-peer-choking
-         peer-pieces
-         peer-current-blocks
-         peer-am-interested
-         set-peer-am-interested!
-         set-peer-ready!)
+      (define peer-id (handshake-send/receive tcp-in tcp-out
+                                              (torrent-sha1 target-torrent)
+                                              my-peer-id
+                                              #:timeout 10))
+      (cond [(void? peer-id)
+             (displayln "Failed to perform handshake.")
+             (custodian-shutdown-all (current-custodian))]
+            [else (set-peer-id! target-peer peer-id)
+                  (set-peer-ready! target-peer #t)
+                  (thread
+                   (lambda ()
+                     (with-handlers
+                       ([exn:fail:network?
+                         (lambda (exn)
+                           (displayln "Peer connection close unexpectedly.")
+                           (custodian-shutdown-all (current-custodian)))])
+                       (peer-worker target-torrent
+                                    target-peer
+                                    tcp-in
+                                    tcp-out
+                                    io-worker))))]))))

@@ -8,6 +8,18 @@
 (require "utils.rkt")
 (require "encoding.rkt")
 
+(provide request-peers)
+
+(define (request-peers tracker-url sha1-bstr my-peer-id [number-of-peers 10])
+  (let* ([tracker-response (announce tracker-url
+                                     sha1-bstr
+                                     my-peer-id
+                                     number-of-peers)]
+         [peers (cadr (assoc #"peers"
+                             (parse-dictionary (open-input-bytes
+                                                tracker-response))))])
+    (parse-peers peers)))
+
 (define (parse-peers peers)
   (define (parse-peer peer)
     (let ([host (subbytes peer 0 4)]
@@ -60,19 +72,6 @@
                                       (extract-all-fields
                                        (bytes-join headers #"\r\n"))))))])
     (read-bytes response-length in)))
-
-(define (request-peers tracker-url sha1-bstr my-peer-id [number-of-peers 10])
-  (let* ([tracker-response (announce tracker-url
-                                     sha1-bstr
-                                     my-peer-id
-                                     number-of-peers)]
-         [peers (cadr (assoc #"peers"
-                             (parse-dictionary (open-input-bytes
-                                                tracker-response))))])
-    (parse-peers peers)))
-
-
-(provide request-peers)
 
 ;; tests
 (module+ test

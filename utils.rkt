@@ -3,33 +3,24 @@
 (require net/uri-codec)
 (require openssl/sha1)
 
-(define RESERVED-OR-UNSAFE
-  (map (λ (c) (char->integer c))
-       (string->list (string-append
-                      ;; reserved
-                      ";/?:@=&$-_.+!*'(),"
-                      ;; unsafe
-                      "<>\"#%{}|\\^~[]`"))))
+(provide bytes-pad
+         bytestring-alist->form-urlencoded
+         generate-peer-id
+         number->bytes
+         uri-encode-bytestring
+         verify-sha1-hash
+         bytes->number)
 
-(define (url-encodable? code-point)
-  (and (> code-point 32)
-       (< code-point 127)
-       (not (member code-point RESERVED-OR-UNSAFE))))
-
-;; racket's uri-encode works with strings only :(
-(define (uri-encode-bytestring bytestring)
-  (apply string-append
-         (for/list ([i (bytes->list bytestring)])
-           (cond
-             [(url-encodable? i) (string (integer->char i))]
-             [else (string-append "%" (string-upcase (number->string i 16)))]))))
+(define (bytes-pad bstr len)
+  (define bstr-len (bytes-length bstr))
+  (if (<= bstr-len len)
+      (bytes-append (make-bytes (- len bstr-len ) 0) bstr)
+      bstr))
 
 (define (bytestring-alist->form-urlencoded parameters)
-
   (define (uri-encode-string-or-bytestring input)
     (cond [(string? input) (uri-encode input)]
           [(bytes? input) (uri-encode-bytestring input)]))
-
   (string-join
    (map (λ (value-pair)
           (string-join
@@ -39,8 +30,12 @@
         parameters)
    "&"))
 
-(define (bytes->number bstr)
-  (string->number (bytes->hex-string bstr) 16))
+(define (generate-peer-id)
+  (define (random-string strlen [charset "0123456789"])
+    (define options-length (string-length charset))
+    (list->string (for/list ([i (range strlen)])
+                    (string-ref charset (random options-length)))))
+  (string-append "-ZZ0001-" (random-string 12)))
 
 (define (number->bytes num)
   (define str (number->string num 16))
@@ -48,33 +43,32 @@
                          str
                          (string-append "0" str))))
 
-(define (bytes-pad bstr len)
-  (define bstr-len (bytes-length bstr))
-  (if (<= bstr-len len)
-      (bytes-append (make-bytes (- len bstr-len ) 0) bstr)
-      bstr))
+(define RESERVED-OR-UNSAFE
+  (map (λ (c) (char->integer c))
+       (string->list (string-append
+                      ;; reserved
+                      ";/?:@=&$-_.+!*'(),"
+                      ;; unsafe
+                      "<>\"#%{}|\\^~[]`"))))
+
+;; racket's uri-encode works with strings only :(
+(define (uri-encode-bytestring bytestring)
+  (define (url-encodable? code-point)
+    (and (> code-point 32)
+         (< code-point 127)
+         (not (member code-point RESERVED-OR-UNSAFE))))
+  (apply string-append
+         (for/list ([i (bytes->list bytestring)])
+           (cond
+             [(url-encodable? i) (string (integer->char i))]
+             [else (string-append "%" (string-upcase (number->string i 16)))]))))
 
 (define (verify-sha1-hash sha1 bstr)
   (equal? sha1 (sha1-bytes (open-input-bytes bstr))))
 
-(define (random-string strlen [charset "0123456789"])
-  (define options-length (string-length charset))
-  (list->string (for/list ([i (range strlen)])
-                  (string-ref charset (random options-length)))))
+(define (bytes->number bstr)
+  (string->number (bytes->hex-string bstr) 16))
 
-(define (generate-peer-id)
-  (string-append "-ZZ0001-" (random-string 12)))
-
-(provide bytes-pad
-         bytestring-alist->form-urlencoded
-         generate-peer-id
-         number->bytes
-         random-string
-         uri-encode-bytestring
-         verify-sha1-hash
-         bytes->number)
-
-;; tests
 (module+ test
   (require rackunit)
 

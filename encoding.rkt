@@ -1,5 +1,32 @@
 #lang racket
 
+(provide parse-torrent-file
+         parse-dictionary
+         bencode-dictionary)
+
+(define (parse-torrent-file file-path)
+  (call-with-input-file file-path
+    (λ (in)
+      (parse-dictionary in))))
+
+(define (parse-dictionary input)
+  (read-char input) ;; drop the #\d
+  (define output (for/list ([i (in-naturals)]
+                            #:break (eq? (next-type? input) 'end))
+                   (list (parse-string input) (parse-next input))))
+  (read-char input) ;; drop the trailing #\e
+  output)
+
+(define (bencode-dictionary input-hash)
+  (bytes-append #"d"
+                (apply bytes-append
+                       (map (λ (item)
+                              (bytes-append
+                               (bencode-string (car item))
+                               (bencode-item (cadr item))))
+                            input-hash))
+                #"e"))
+
 ;; utils
 (define (read-string-until-char input stop-char)
   (let loop ([result '()])
@@ -47,14 +74,6 @@
   (read-char input) ;; drop the trailing #\e
   output)
 
-(define (parse-dictionary input)
-  (read-char input) ;; drop the #\d
-  (define output (for/list ([i (in-naturals)]
-                            #:break (eq? (next-type? input) 'end))
-                   (list (parse-string input) (parse-next input))))
-  (read-char input) ;; drop the trailing #\e
-  output)
-
 ;; encoders
 (define (bencode-string input)
   (let ([byte-string (cond [(bytes? input) input]
@@ -78,25 +97,6 @@
           [else
            (loop (cons (bencode-item (first remaining-items)) result)
                  (rest remaining-items))])))
-
-(define (bencode-dictionary input-hash)
-  (bytes-append #"d"
-                (apply bytes-append
-                       (map (λ (item)
-                              (bytes-append
-                               (bencode-string (car item))
-                               (bencode-item (cadr item))))
-                            input-hash))
-                #"e"))
-
-(define (parse-torrent-file file-path)
-  (call-with-input-file file-path
-    (λ (in)
-      (parse-dictionary in))))
-
-(provide parse-torrent-file
-         parse-dictionary
-         bencode-dictionary)
 
 (module+ test
   (require rackunit)
