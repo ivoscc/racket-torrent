@@ -92,16 +92,14 @@
                                   (if (> remainder 0)
                                       (list (list full-blocks remainder))
                                       null))])
-    (for-each
-     (lambda (block)
-       (let* ([block-offset (car block)]
-              [current-block-size (cadr block)]
-              [payload (request-payload piece-index
-                                        (* block-offset BLOCK-SIZE)
-                                        current-block-size)])
-         (write-bytes payload tcp-out)
-         (flush-output tcp-out)))
-     blocks)))
+    (for ([block blocks])
+      (let* ([block-offset (car block)]
+             [current-block-size (cadr block)]
+             [payload (request-payload piece-index
+                                       (* block-offset BLOCK-SIZE)
+                                       current-block-size)])
+        (write-bytes payload tcp-out)
+        (flush-output tcp-out)))))
 
 (define (parse-piece payload)
   (let ([piece-index (bytes->number (subbytes payload 0 4))]
