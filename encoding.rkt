@@ -72,6 +72,7 @@
                       (lambda (c) (not (char-numeric? c)))
                       (string->list digits)))
              0)
+          ;; contains digit starting with 0 (other than "i0e")
           (and
            ;; first digit is 0
            (equal? "0" (substring digits 0 1))
