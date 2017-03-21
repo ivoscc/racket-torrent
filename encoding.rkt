@@ -62,9 +62,31 @@
   (let ([str-len (string->number (read-string-until-char input #\:))])
     (read-bytes str-len input)))
 
+(define (valid-integer? str)
+  (let* ([negative (equal? (substring str 0 1) "-")]
+         [digits (if negative (substring str 1) str)])
+    ;; check failure conditions
+    (not (or
+          ;; contains non-numeric characters
+          (> (length (filter
+                      (lambda (c) (not (char-numeric? c)))
+                      (string->list digits)))
+             0)
+          (and
+           ;; first digit is 0
+           (equal? "0" (substring digits 0 1))
+           (or
+            ;; ... and there're more digits afterwards
+            (> (string-length digits) 1)
+            ;; ... or the whole number is negative
+            negative))))))
+
 (define (parse-integer input)
   (read-char input) ;; drop the #\i
-  (string->number (read-string-until-char input #\e)))
+  (let ([candidate (read-string-until-char input #\e)])
+    (if (valid-integer? candidate)
+        (string->number candidate)
+        (error 'parse-integer "Failed to convert non-integer: ~a" candidate))))
 
 (define (parse-list input)
   (read-char input) ;; drop the #\l
@@ -119,6 +141,12 @@
   (check-equal? (parse-integer (open-input-string "i123e")) 123)
   (check-equal? (parse-integer (open-input-string "i0e")) 0)
   (check-equal? (parse-integer (open-input-string "i-10e")) -10)
+  (check-exn exn:fail?
+             (lambda () (parse-integer (open-input-string "i1.2e")) ))
+  (check-exn exn:fail?
+             (lambda () (parse-integer (open-input-string "i03e")) ))
+  (check-exn exn:fail?
+             (lambda () (parse-integer (open-input-string "i-0e")) ))
 
   ;; Test parse-list
   (check-equal? (parse-list (open-input-string "l4:spam4:eggsi42ee"))
@@ -160,5 +188,4 @@
   (check-equal? (bencode-dictionary '(("key" ("nested" "wat"))))
                 #"d3:keyl6:nested3:watee")
   (check-equal? (bencode-dictionary '(("key" (("nested" "wat")))))
-                #"d3:keyd6:nested3:watee")
-  )
+                #"d3:keyd6:nested3:watee"))
